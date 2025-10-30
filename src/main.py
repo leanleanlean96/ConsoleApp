@@ -5,13 +5,14 @@ import sys
 from pathlib import Path
 
 import typer
-from typer import Typer, Context
+from typer_shell import make_typer_shell
+from typer import Context
 
 from src.dependencies.container import Container
 from src.enums.file_mode import FileReadMode
-from src.services.macos_console import MacOSConsoleService
+from src.services.macos_console import LinuxConsoleService
 
-app = Typer()
+app = typer.Typer()
 
 
 def get_container(ctx: Context) -> Container:
@@ -26,30 +27,53 @@ def main(ctx: Context):
     logging.config.dictConfig(LOGGING_CONFIG)
     logger = logging.getLogger(__name__)
     ctx.obj = Container(
-        console_service=MacOSConsoleService(logger=logger),
+        console_service=LinuxConsoleService(logger=logger),
     )
 
 
 @app.command()
 def ls(
     ctx: Context,
-    path: Path = typer.Argument(
-        ..., exists=False, readable=False, help="File to print"
+    paths: list[Path] = typer.Argument(
+        default=[Path(".")], allow_dash=True, help="directories to list contends of (default - current directory)"
     ),
+    long_form: bool = typer.Option(
+        False, "-l", "--long", help="use a long listing format"
+    ),
+    all_files: bool = typer.Option(
+        False, "-a", "--all", help="do not ignore entries starting with ."
+    )
 ) -> None:
     """
-    List all files in a directory.
-    :param ctx:   typer context object for imitating di container
-    :param path:  path to directory to list
-    :return: content of directory
+    List all files in a directory/directories.
     """
     try:
         container: Container = get_container(ctx)
-        content = container.console_service.ls(path)
-        sys.stdout.writelines(content)
+        for path in paths:
+            content = container.console_service.ls(path, 
+                                                   all_files, 
+                                                   long_form
+                                                   )
+            sys.stdout.write(f"{path}: \n")
+            sys.stdout.writelines(content)
+    except OSError as e:
+            typer.echo(e)
+
+@app.command()
+def cd(
+    ctx: Context,
+    path: Path = typer.Argument(
+        default=Path("~"), help=""
+    )
+) -> None:
+    """
+    Change the shell working directory
+    """
+    try:
+        container: Container = get_container(ctx)
+        container.console_service.cd(path)
     except OSError as e:
         typer.echo(e)
-
 
 @app.command()
 def cat(
@@ -57,14 +81,12 @@ def cat(
     filename: Path = typer.Argument(
         ..., exists=False, readable=False, help="File to print"
     ),
-    mode: bool = typer.Option(False, "--bytes", "-b", help="Read as bytes"),
+    mode: bool = typer.Option(
+        False, "--bytes", "-b", help="Read as bytes"
+    ),
 ):
     """
     Cat a file
-    :param ctx: typer context object for imitating di container
-    :param filename: Filename to cat
-    :param mode: Mode to read the file in
-    :return:
     """
     try:
         container: Container = get_container(ctx)
@@ -80,6 +102,69 @@ def cat(
     except OSError as e:
         typer.echo(e)
 
+@app.command()
+def cp(
+    ctx: Context,
+    recursive: bool = typer.Option(
+        False, "-r", "--recursive", help="copy directories recursively"
+    ),
+    sources: list[Path] = typer.Argument(
+        ...
+    ),
+    dest: Path = typer.Argument(
+        ...
+    )
+) -> None:
+    """
+    Copy SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.
+    """
+    try:
+        container: Container = get_container(ctx)
+        for source in sources:
+            container.console_service.cp(
+                                        recursive,
+                                        source,
+                                        dest
+            )
+    except OSError as e:
+        typer.echo(e)
+
+@app.command()
+def mv(
+    ctx: Context,
+    source: Path = typer.Argument(
+        ...
+    ),
+    dest: Path = typer.Argument(
+        ...
+    )
+) -> None:
+    """
+    Rename SOURCE to DEST, or move SOURCE(s) to DIRECTORY
+    """
+    try:
+        container: Container = get_container()
+        container.console_service.mv(source, dest)
+    except OSError as e:
+        typer.echo(e)
+    except PermissionError as e:
+        typer.echo(e)
+
+@app.command()
+def rm(
+    ctx: Context,
+    recursive: bool = typer.Option(False, "-r", "--recursive", help="remove directories and their contents recursively"),
+    paths: list[Path] = typer.Argument(..., )
+):
+    try:
+        container: Container = get_container(ctx)
+        for path in paths:
+            container.console_service.rm(
+                                        recursive,
+                                        path
+            )
+    except OSError as e:
+        typer.echo(e)
 
 if __name__ == "__main__":
     app()
