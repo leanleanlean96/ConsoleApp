@@ -10,6 +10,7 @@ from typer import Context
 
 from src.dependencies.container import Container
 from src.enums.file_mode import FileReadMode
+from src.enums.archive_format import ArchiveFormat
 from src.services.macos_console import LinuxConsoleService
 
 app = typer.Typer()
@@ -84,7 +85,7 @@ def cat(
     mode: bool = typer.Option(
         False, "--bytes", "-b", help="Read as bytes"
     ),
-):
+) -> None:
     """
     Cat a file
     """
@@ -155,7 +156,7 @@ def rm(
     ctx: Context,
     recursive: bool = typer.Option(False, "-r", "--recursive", help="remove directories and their contents recursively"),
     paths: list[Path] = typer.Argument(..., )
-):
+) -> None:
     try:
         container: Container = get_container(ctx)
         for path in paths:
@@ -163,6 +164,54 @@ def rm(
                                         recursive,
                                         path
             )
+    except OSError as e:
+        typer.echo(e)
+
+@app.command()
+def tar(
+    ctx: Context,
+    folder: Path = typer.Argument(...),
+    archive_name: Path = typer.Argument(...)
+) -> None:
+    try:
+        container: Container = get_container(ctx)
+        container.console_service.pack(folder, archive_name, ArchiveFormat.gztar)
+    except OSError as e:
+        typer.echo(e)
+
+@app.command()
+def untar(
+    ctx: Context,
+    archive: Path = typer.Argument(...),
+    dest: Path = typer.Argument(default=Path("."))
+) -> None:
+    try:
+        container: Container = get_container(ctx)
+        container.console_service.unpack(archive, dest, ArchiveFormat.gztar)
+    except OSError as e:
+        typer.echo(e)
+
+@app.command()
+def zip(
+    ctx: Context,
+    folder: Path = typer.Argument(...),
+    archive_name: Path = typer.Argument(...)
+) -> None:
+    try:
+        container: Container = get_container(ctx)
+        container.console_service.pack(folder, archive_name, ArchiveFormat.zipfile)
+    except OSError as e:
+        typer.echo(e)
+
+@app.command()
+def unzip(
+    ctx: Context,
+    archive: Path = typer.Argument(...),
+    dest: Path = typer.Argument(default=Path("."))
+) -> None:
+    try:
+        container: Container = get_container(ctx)
+        container.console_service.unpack(archive, dest, ArchiveFormat.zipfile)
     except OSError as e:
         typer.echo(e)
 

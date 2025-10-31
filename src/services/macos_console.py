@@ -12,6 +12,9 @@ from pathlib import Path
 from typing import Literal
 
 from src.enums.file_mode import FileReadMode
+from src.enums.archive_format import ArchiveFormat
+from src.enums.archive_format import ExtensionName
+from src.errors import WrongFormatError
 from src.services.base import OSConsoleServiceBase
 
 
@@ -141,8 +144,54 @@ class LinuxConsoleService(OSConsoleServiceBase):
             if not recursive:
                 self._logger.error(f"Cannot remove {path.name} is a directory")
                 raise IsADirectoryError(f"Can't delete {path} -r is required")
+            self._logger.info(f"removing {path}")
             shutil.rmtree(path)
         else:
+            self._logger.info(f"removing {path}")
             os.remove(path)
 
-
+    def pack(
+        self,
+        folder: PathLike[str] | str,
+        archive_name: PathLike[str] | str,
+        archive_format: Literal[ArchiveFormat.gztar, ArchiveFormat.zipfile]
+    ) -> None:
+        folder = Path(folder)
+        archive_name = Path(archive_name)
+        if not folder.exists():
+            self._logger.error(f"{folder} does not exist")
+            raise FileNotFoundError(f"You entered {folder} an unexisting directory")
+        if not folder.is_dir():
+            self._logger.error(f"{folder} is not a directory. Archivation unavailable")
+            raise NotADirectoryError(f"{folder} is not a directory")
+        if archive_name.exists():
+            self._logger.error(f"{archive_name.name} already exists")
+            raise FileExistsError(f"{archive_name.name} exists. Cant't archive")
+        archive_name = Path(os.path.splitext(archive_name)[0])
+        self._logger.info("Archiving a directory")
+        shutil.make_archive(base_name=archive_name.name, base_dir=str(folder), format=archive_format)
+    
+    def unpack(
+        self,
+        archive: PathLike[str] | str,
+        dest: PathLike[str] | str,
+        archive_format: Literal[ArchiveFormat.gztar, ArchiveFormat.zipfile]
+    ) -> None:
+        archive = Path(archive)
+        dest = Path(dest)
+        if not archive.exists():
+            self._logger.error("Archive does not exist")
+            raise FileNotFoundError(f"{archive} does not exist")
+        if not dest.exists():
+            self._logger.error("Destination does not exist")
+            raise FileNotFoundError(f"{dest} does not exist")
+        match archive_format:
+            case ArchiveFormat.gztar:
+                extension: str = ExtensionName.gztar
+            case ArchiveFormat.zipfile:
+                extension: str = ExtensionName.zipfile
+        if not str(archive).endswith(extension) or not archive.is_file():
+            self._logger.error("Invalid format")
+            raise WrongFormatError(f"Can't unpack {archive}")
+        self._logger.info("Unpacking archive")
+        shutil.unpack_archive(archive, dest, archive_format)

@@ -1,0 +1,3 @@
+
+class WrongFormatError(OSError):
+    pass
