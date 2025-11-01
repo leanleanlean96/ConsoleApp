@@ -48,16 +48,16 @@ def ls(
     """
     List all files in a directory/directories.
     """
-    try:
-        container: Container = get_container(ctx)
-        for path in paths:
+    container: Container = get_container(ctx)
+    for path in paths:
+        try:
             content = container.console_service.ls(path, 
-                                                   all_files, 
-                                                   long_form
-                                                   )
+                                                all_files, 
+                                                long_form
+                                                )
             sys.stdout.write(f"{path}: \n")
             sys.stdout.writelines(content)
-    except OSError as e:
+        except OSError as e:
             typer.echo(e)
 
 @app.command()
@@ -119,16 +119,16 @@ def cp(
     """
     Copy SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.
     """
-    try:
-        container: Container = get_container(ctx)
-        for source in sources:
+    container: Container = get_container(ctx)
+    for source in sources:
+        try:
             container.console_service.cp(
                                         recursive,
                                         source,
                                         dest
             )
-    except OSError as e:
-        typer.echo(e)
+        except OSError as e:
+            typer.echo(e)
 
 @app.command()
 def mv(
@@ -141,7 +141,7 @@ def mv(
     )
 ) -> None:
     """
-    Rename SOURCE to DEST, or move SOURCE(s) to DIRECTORY
+    Rename SOURCE to DEST, or move SOURCE to DIRECTORY
     """
     try:
         container: Container = get_container()
@@ -157,15 +157,15 @@ def rm(
     recursive: bool = typer.Option(False, "-r", "--recursive", help="remove directories and their contents recursively"),
     paths: list[Path] = typer.Argument(..., )
 ) -> None:
-    try:
-        container: Container = get_container(ctx)
-        for path in paths:
+    container: Container = get_container(ctx)
+    for path in paths:
+        try:
             container.console_service.rm(
                                         recursive,
                                         path
             )
-    except OSError as e:
-        typer.echo(e)
+        except OSError as e:
+           typer.echo(e)
 
 @app.command()
 def tar(
@@ -213,6 +213,25 @@ def unzip(
         container: Container = get_container(ctx)
         container.console_service.unpack(archive, dest, ArchiveFormat.zipfile)
     except OSError as e:
+        typer.echo(e)
+
+@app.command()
+def grep(
+    ctx: Context,
+    recursive: bool = typer.Option(
+        False, "-r", "--recursive", help="Recursively check child directories"
+    ),
+    ignorecase: bool = typer.Option(
+        False, "-i", "-ignore-case", help="ignore case distinctions in patterns and data"
+    ),
+    pattern: str = typer.Argument(...),
+    files: list[Path] = typer.Argument(default=Path("."))
+) -> None:
+    try:
+        container: Container = get_container(ctx)
+        contents = container.console_service.grep(recursive, ignorecase, pattern, files)
+        sys.stdout.writelines(contents)
+    except Exception as e:
         typer.echo(e)
 
 if __name__ == "__main__":

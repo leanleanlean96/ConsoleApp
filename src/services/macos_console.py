@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 import stat
 import shutil
 from datetime import datetime
@@ -9,6 +10,7 @@ from os import PathLike
 from os import stat_result
 from pwd import getpwuid
 from pathlib import Path
+from typing import Generator
 from typing import Literal
 
 from src.enums.file_mode import FileReadMode
@@ -195,3 +197,42 @@ class LinuxConsoleService(OSConsoleServiceBase):
             raise WrongFormatError(f"Can't unpack {archive}")
         self._logger.info("Unpacking archive")
         shutil.unpack_archive(archive, dest, archive_format)
+
+    def grep(
+        self,
+        recursive: bool,
+        ignorecase: bool,
+        pattern: str,
+        files: list[PathLike[str] | str]
+    ) -> Generator[str]:
+        for file in files:
+            file = Path(file)
+            pattern = pattern.strip("\"")
+            if not file.exists():
+                self._logger.error("File does not exist")
+                raise FileNotFoundError(f"{file} does not exist")
+            if not recursive and file.is_dir():
+                self._logger("-r unspecified and file is a directory")
+                raise IsADirectoryError(f"{file} is a directory")
+            if file.is_dir():
+                for child_file in file.rglob("*"):
+                    if child_file.is_file():
+                        yield from self.search_in_file(child_file, pattern, ignorecase)
+            if file.is_file():
+                yield from self.search_in_file(file, pattern, ignorecase)
+    
+    def search_in_file(
+        self,
+        file: Path,
+        pattern: str,
+        ignorecase: bool
+    ) -> Generator[str]:
+        try:
+            flags: int = re.IGNORECASE if ignorecase else 0
+            compiled_pattern: re.Pattern = re.compile(pattern, flags)
+            file_contents = file.read_text(encoding="utf-8", errors="ignore")
+            for line_num, line in enumerate(file_contents.splitlines(), 1):
+                if compiled_pattern.search(line):
+                    yield f"{file.name}: {line_num}:{line}\n"
+        except Exception as e:
+            self._logger.error("Can't open file. Skipping...")
