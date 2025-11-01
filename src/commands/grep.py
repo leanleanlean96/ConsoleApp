@@ -19,6 +19,9 @@ def register_grep(app):
         pattern: str = typer.Argument(...),
         files: list[Path] = typer.Argument(default=Path("."))
     ) -> None:
+        """
+        Search for pattern in each file
+        """
         command = "grep"
         if recursive:
             command += " -r"

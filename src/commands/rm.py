@@ -12,6 +12,9 @@ def register_rm(app):
         recursive: bool = typer.Option(False, "-r", "--recursive", help="remove directories and their contents recursively"),
         paths: list[Path] = typer.Argument(..., )
     ) -> None:
+        """
+        Remove the file(s)
+        """
         command: str = "rm"
         if recursive:
             command += " -r"

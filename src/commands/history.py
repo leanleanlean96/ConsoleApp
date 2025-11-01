@@ -9,6 +9,9 @@ console_service = init_services()
 def register_history(app):
     @app.command()
     def history():
+        """
+        Display the history list
+        """
         try:
             command_history: list[str] = console_service.history()
             sys.stdout.writelines(command_history)

@@ -13,6 +13,9 @@ def register_tar(app):
         folder: Path = typer.Argument(...),
         archive_name: Path = typer.Argument(...)
     ) -> None:
+        """
+        Create archive .tar.gz from file
+        """
         command: str = f"tar {folder} {archive_name}"
         try:
             console_service.pack(folder, archive_name, ArchiveFormat.gztar)
@@ -28,6 +31,9 @@ def register_untar(app):
         archive: Path = typer.Argument(...),
         dest: Path = typer.Argument(default=Path("."))
     ) -> None:
+        """
+        Unarchive .tar.gz archive
+        """
         command: str = f"untar {archive} {dest}"
         try:
 

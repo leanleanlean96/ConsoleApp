@@ -13,9 +13,11 @@ def register_zip(app):
         folder: Path = typer.Argument(...),
         archive_name: Path = typer.Argument(...)
     ) -> None:
+        """
+        Create archive .zip from file
+        """
         command: str = f"zip {folder} {archive_name}"
         try:
-
             console_service.pack(folder, archive_name, ArchiveFormat.zipfile)
         except OSError as e:
             typer.echo(e)
@@ -29,6 +31,9 @@ def register_unzip(app):
         archive: Path = typer.Argument(...),
         dest: Path = typer.Argument(default=Path("."))
     ) -> None:
+        """
+        Unarchive .zip archive
+        """
         command: str = f"unzip {archive} {dest}"
         try:
             console_service.unpack(archive, dest, ArchiveFormat.zipfile)
