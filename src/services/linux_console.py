@@ -1,8 +1,8 @@
-import logging
 import os
 import re
 import stat
 import shutil
+import shlex
 from datetime import datetime
 from grp import getgrgid
 from logging import Logger
@@ -12,6 +12,7 @@ from pwd import getpwuid
 from pathlib import Path
 from typing import Generator
 from typing import Literal
+from typing import Sequence
 
 from src.enums.file_mode import FileReadMode
 from src.enums.archive_format import ArchiveFormat
@@ -56,12 +57,14 @@ class LinuxConsoleService(OSConsoleServiceBase):
             else:
                 directory_contents.append(entry.name + "\n")
         return directory_contents
-    
+
     def cd(
         self,
         path: PathLike[str] | str
     ) -> None:
         path = Path(path)
+        if str(path).startswith("~"):
+            path = path.expanduser()
         if not path.exists():
             self._logger.error(f"Folder not found: {path}")
             raise FileNotFoundError(path)
@@ -80,12 +83,13 @@ class LinuxConsoleService(OSConsoleServiceBase):
         source = Path(source)
         dest = Path(dest)
         if not source.exists():
-            self._logger.error(f"Folder not found: {dest}")
+            self._logger.error("Folder not found")
             raise FileNotFoundError(f"{source} does not exist")
         if source.is_dir() and dest.is_file():
-            self._logger.error(f"Can't copy {source}[dir] to {dest}[file]")
+            self._logger.error("Can't copy dir to file")
             raise IsADirectoryError("")
         if source.is_dir() and not recursive:
+            self._logger.error("Can't copy dir with recursive=False")
             raise IsADirectoryError(f"Can't copy {source}, -r unspecified. Ommiting...")
         self._logger.info("Starting to copy...")
         if recursive and source.is_dir():
@@ -98,20 +102,20 @@ class LinuxConsoleService(OSConsoleServiceBase):
         filename: PathLike[str] | str,
         mode: Literal[FileReadMode.string, FileReadMode.bytes] = FileReadMode.string,
     ) -> str | bytes:
-        path: Path = Path(filename)
-        if not path.exists(follow_symlinks=True):
+        filename = Path(filename)
+        if not filename.exists(follow_symlinks=True):
             self._logger.error(f"File not found: {filename}")
             raise FileNotFoundError(filename)
-        if path.is_dir(follow_symlinks=True):
-            self._logger.error(f"You entered {filename} is not a file")
+        if filename.is_dir(follow_symlinks=True):
+            self._logger.error("Entered filename is not a file")
             raise IsADirectoryError(f"You entered {filename} is not a file")
         try:
             self._logger.info(f"Reading file {filename} in mode {mode}")
             match mode:
                 case FileReadMode.string:
-                    return path.read_text(encoding="utf-8")
+                    return filename.read_text(encoding="utf-8")
                 case FileReadMode.bytes:
-                    return path.read_bytes()
+                    return filename.read_bytes()
         except OSError as e:
             self._logger.exception(f"Error reading {filename}: {e}")
             raise
@@ -121,18 +125,18 @@ class LinuxConsoleService(OSConsoleServiceBase):
         source: PathLike[str] | str,
         dest: PathLike[str] | str
     ):
-        source: Path = Path(source)
-        dest: Path = Path(dest)
+        source = Path(source)
+        dest = Path(dest)
         if not source.exists():
-            self._logger.error(f"Directory not found: {source}. Can't move")
+            self._logger.error("Directory not found Can't move")
             raise FileNotFoundError(f"{source} does not exist")
         try:
             shutil.move(source, dest)
-            self._logger.info(f"Moving {source} to {dest}")
-        except PermissionError as e:
+            self._logger.info("Moving...")
+        except PermissionError:
             self._logger.error("Permission denied")
-            raise
-    
+            raise PermissionError("Permission denied")
+
     def rm(
         self,
         recursive: bool,
@@ -140,19 +144,19 @@ class LinuxConsoleService(OSConsoleServiceBase):
     ) -> None:
         path = Path(path)
         if not path.exists():
-            self._logger.error(f"{path} does not exist")
+            self._logger.error("Path does not exist")
             raise FileNotFoundError("Can't remove file that does not exist")
         if path.absolute() == Path("/") or path.absolute() == Path("..").absolute():
-            self._logger.error(f"{path} is either a root or parent directory")
+            self._logger.error("Path is either a root or parent directory")
             raise PermissionError("Can't delete root or parent directory")
         if path.is_dir():
             if not recursive:
-                self._logger.error(f"Cannot remove {path.name} is a directory")
+                self._logger.error("Cannot remove a directory with recursive=false")
                 raise IsADirectoryError(f"Can't delete {path} -r is required")
-            self._logger.info(f"removing {path}")
+            self._logger.info("removing...")
             shutil.rmtree(path)
         else:
-            self._logger.info(f"removing {path}")
+            self._logger.info("removing...")
             os.remove(path)
 
     def pack(
@@ -164,18 +168,18 @@ class LinuxConsoleService(OSConsoleServiceBase):
         folder = Path(folder)
         archive_name = Path(archive_name)
         if not folder.exists():
-            self._logger.error(f"{folder} does not exist")
+            self._logger.error("folder does not exist")
             raise FileNotFoundError(f"You entered {folder} an unexisting directory")
         if not folder.is_dir():
-            self._logger.error(f"{folder} is not a directory. Archivation unavailable")
+            self._logger.error("folder is not a directory. Archivation unavailable")
             raise NotADirectoryError(f"{folder} is not a directory")
         if archive_name.exists():
             self._logger.error(f"{archive_name.name} already exists")
             raise FileExistsError(f"{archive_name.name} exists. Cant't archive")
-        archive_name = Path(os.path.splitext(archive_name)[0])
         self._logger.info("Archiving a directory")
+        archive_name = Path(os.path.splitext(archive_name)[0])
         shutil.make_archive(base_name=archive_name.name, base_dir=str(folder), format=archive_format)
-    
+
     def unpack(
         self,
         archive: PathLike[str] | str,
@@ -194,7 +198,7 @@ class LinuxConsoleService(OSConsoleServiceBase):
             case ArchiveFormat.gztar:
                 extension: str = ExtensionName.gztar
             case ArchiveFormat.zipfile:
-                extension: str = ExtensionName.zipfile
+                extension = ExtensionName.zipfile
         if not str(archive).endswith(extension) or not archive.is_file():
             self._logger.error("Invalid format")
             raise WrongFormatError(f"Can't unpack {archive}")
@@ -206,24 +210,27 @@ class LinuxConsoleService(OSConsoleServiceBase):
         recursive: bool,
         ignorecase: bool,
         pattern: str,
-        files: list[PathLike[str] | str]
+        files: Sequence[PathLike[str] | str]
     ) -> Generator[str]:
         for file in files:
-            file: Path = Path(file)
-            pattern: str = pattern.strip("\"")
-            if not file.exists():
-                self._logger.error("File does not exist")
-                raise FileNotFoundError(f"{file} does not exist")
-            if not recursive and file.is_dir():
-                self._logger("-r unspecified and file is a directory")
-                raise IsADirectoryError(f"{file} is a directory")
-            if file.is_dir():
-                for child_file in file.rglob("*"):
-                    if child_file.is_file():
-                        yield from self.search_in_file(child_file, pattern, ignorecase)
-            if file.is_file():
-                yield from self.search_in_file(file, pattern, ignorecase)
-    
+            try:
+                file = Path(file)
+                pattern = pattern.strip("\"")
+                if not file.exists():
+                    self._logger.error("File does not exist")
+                    raise FileNotFoundError(f"{file} does not exist")
+                if not recursive and file.is_dir():
+                    self._logger.error("-r unspecified and file is a directory")
+                    raise IsADirectoryError(f"{file} is a directory")
+                if file.is_dir():
+                    for child_file in file.rglob("*"):
+                        if child_file.is_file():
+                            yield from self.search_in_file(child_file, pattern, ignorecase)
+                if file.is_file():
+                    yield from self.search_in_file(file, pattern, ignorecase)
+            except Exception as e:
+                raise e
+
     def search_in_file(
         self,
         file: Path,
@@ -237,16 +244,65 @@ class LinuxConsoleService(OSConsoleServiceBase):
             for line_num, line in enumerate(file_contents.splitlines(), 1):
                 if compiled_pattern.search(line):
                     yield f"{file.name}: {line_num}:{line}\n"
-        except Exception as e:
-            self._logger.error("Can't open file. Skipping...")
-    
-    def history(self) -> Generator[str]:
+        except Exception:
+            self._logger.error("An error occured. Skipping...")
+
+    def history(self) -> list[str]:
         try:
             history: list[tuple[int, str]] = self._history.get_history()
             self._logger.info("Listing history...")
             return [f"{num}: {command}\n" for num, command in history]
         except Exception as e:
-            self._logger.error(f"Could not get history. An error occured: {e}")
+            self._logger.error(f"Could not load history. An error occured: {e}")
             raise
 
-    
+    def undo(self) -> None:
+        try:
+            history: list[tuple[int, str]] = self._history.get_history()
+            for _, command in reversed(history):
+                match command:
+                    case command.startswith("cp"):
+                        self.undo_cp(command)
+                        return
+                    case command.startswith("mv"):
+                        self.undo_mv(command)
+                        return
+                    case command.startswith("rm"):
+                        self.undo_rm(command)
+                        return
+        except OSError as e:
+            raise e
+
+    def undo_mv(
+        self,
+        command: str
+    ) -> None:
+        try:
+            splitted_command: list[str] = shlex.split(command)
+            self.mv(splitted_command[-1], splitted_command[-2])
+        except OSError:
+            self._logger.error("Permission denied")
+            raise
+
+    def undo_cp(
+        self,
+        command: str
+    ) -> None:
+        try:
+            splitted_command: list[str] = shlex.split(command)
+            dest: Path = Path(splitted_command[-1])
+            sources: list[Path] = [Path(path) for path in splitted_command[1:] if path != "-r"]
+            if dest.is_dir():
+                for source in sources:
+                    copied_dir_path: Path = dest / source.name
+                    self.rm(True, copied_dir_path)
+            if dest.is_file():
+                self.rm(False, dest)
+        except OSError:
+            raise
+
+    def undo_rm(
+        self,
+        command: str
+    ) -> None:
+        pass
