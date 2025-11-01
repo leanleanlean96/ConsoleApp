@@ -18,11 +18,14 @@ from src.enums.archive_format import ArchiveFormat
 from src.enums.archive_format import ExtensionName
 from src.errors import WrongFormatError
 from src.services.base import OSConsoleServiceBase
+from src.services.history_service import HistoryService
 
 
 class LinuxConsoleService(OSConsoleServiceBase):
-    def __init__(self, logger: Logger):
+    def __init__(self, logger: Logger, history_service: HistoryService):
         self._logger = logger
+        self._history = history_service
+
 
     def ls(self,
             path: PathLike[str] | str,
@@ -206,8 +209,8 @@ class LinuxConsoleService(OSConsoleServiceBase):
         files: list[PathLike[str] | str]
     ) -> Generator[str]:
         for file in files:
-            file = Path(file)
-            pattern = pattern.strip("\"")
+            file: Path = Path(file)
+            pattern: str = pattern.strip("\"")
             if not file.exists():
                 self._logger.error("File does not exist")
                 raise FileNotFoundError(f"{file} does not exist")
@@ -230,9 +233,20 @@ class LinuxConsoleService(OSConsoleServiceBase):
         try:
             flags: int = re.IGNORECASE if ignorecase else 0
             compiled_pattern: re.Pattern = re.compile(pattern, flags)
-            file_contents = file.read_text(encoding="utf-8", errors="ignore")
+            file_contents: str = file.read_text(encoding="utf-8", errors="ignore")
             for line_num, line in enumerate(file_contents.splitlines(), 1):
                 if compiled_pattern.search(line):
                     yield f"{file.name}: {line_num}:{line}\n"
         except Exception as e:
             self._logger.error("Can't open file. Skipping...")
+    
+    def history(self) -> Generator[str]:
+        try:
+            history: list[tuple[int, str]] = self._history.get_history()
+            self._logger.info("Listing history...")
+            return [f"{num}: {command}\n" for num, command in history]
+        except Exception as e:
+            self._logger.error(f"Could not get history. An error occured: {e}")
+            raise
+
+    

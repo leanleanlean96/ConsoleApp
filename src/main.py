@@ -1,6 +1,5 @@
 from src.common.config import LOGGING_CONFIG
 
-import logging
 import sys
 from pathlib import Path
 
@@ -9,32 +8,17 @@ from typer_shell import make_typer_shell
 from typer import Context
 
 from src.dependencies.container import Container
-from src.enums.file_mode import FileReadMode
 from src.enums.archive_format import ArchiveFormat
-from src.services.macos_console import LinuxConsoleService
-
-app = typer.Typer()
-
-
-def get_container(ctx: Context) -> Container:
-    container = ctx.obj
-    if not isinstance(container, Container):
-        raise RuntimeError("DI container is not initialized")
-    return container
+from src.enums.file_mode import FileReadMode
+from src.services.init_services import init_services
 
 
-@app.callback()
-def main(ctx: Context):
-    logging.config.dictConfig(LOGGING_CONFIG)
-    logger = logging.getLogger(__name__)
-    ctx.obj = Container(
-        console_service=LinuxConsoleService(logger=logger),
-    )
+console_service = init_services()
 
+app = make_typer_shell(prompt="$~ ")
 
 @app.command()
 def ls(
-    ctx: Context,
     paths: list[Path] = typer.Argument(
         default=[Path(".")], allow_dash=True, help="directories to list contends of (default - current directory)"
     ),
@@ -48,10 +32,15 @@ def ls(
     """
     List all files in a directory/directories.
     """
-    container: Container = get_container(ctx)
+    command:str = "ls"
+    if long_form:
+        command += " -l"
+    if all_files:
+        command += " -a"
     for path in paths:
+        command += f" {path}"
         try:
-            content = container.console_service.ls(path, 
+            content = console_service.ls(path, 
                                                 all_files, 
                                                 long_form
                                                 )
@@ -59,26 +48,25 @@ def ls(
             sys.stdout.writelines(content)
         except OSError as e:
             typer.echo(e)
+    console_service._history.append_command_to_history(command)
 
 @app.command()
 def cd(
-    ctx: Context,
     path: Path = typer.Argument(
-        default=Path("~"), help=""
+        default=Path("~")
     )
 ) -> None:
     """
     Change the shell working directory
-    """
+    """ 
     try:
-        container: Container = get_container(ctx)
-        container.console_service.cd(path)
+        console_service.cd(path)
     except OSError as e:
         typer.echo(e)
+    console_service._history.append_command_to_history(f"cd {path}")
 
 @app.command()
 def cat(
-    ctx: Context,
     filename: Path = typer.Argument(
         ..., exists=False, readable=False, help="File to print"
     ),
@@ -89,10 +77,12 @@ def cat(
     """
     Cat a file
     """
+    command: str = "cat"
+    if mode: command += " -b"
+    command += f" {Path}"
     try:
-        container: Container = get_container(ctx)
         mode = FileReadMode.bytes if mode else FileReadMode.string
-        data = container.console_service.cat(
+        data = console_service.cat(
             filename,
             mode=mode,
         )
@@ -102,10 +92,10 @@ def cat(
             sys.stdout.write(data)
     except OSError as e:
         typer.echo(e)
+    console_service._history.append_command_to_history(command)
 
 @app.command()
 def cp(
-    ctx: Context,
     recursive: bool = typer.Option(
         False, "-r", "--recursive", help="copy directories recursively"
     ),
@@ -119,20 +109,23 @@ def cp(
     """
     Copy SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.
     """
-    container: Container = get_container(ctx)
+    command = "cp"
+    if recursive: command += " -r"
     for source in sources:
+        command += f" {source}"
         try:
-            container.console_service.cp(
+            console_service.cp(
                                         recursive,
                                         source,
                                         dest
             )
         except OSError as e:
             typer.echo(e)
+    command += f" {dest}"
+    console_service._history.append_command_to_history(command)
 
 @app.command()
 def mv(
-    ctx: Context,
     source: Path = typer.Argument(
         ...
     ),
@@ -143,81 +136,86 @@ def mv(
     """
     Rename SOURCE to DEST, or move SOURCE to DIRECTORY
     """
+    command = f"mv {source} {dest}"
     try:
-        container: Container = get_container()
-        container.console_service.mv(source, dest)
+        
+        console_service.mv(source, dest)
     except OSError as e:
         typer.echo(e)
     except PermissionError as e:
         typer.echo(e)
+    console_service._history.append_command_to_history(command)
 
 @app.command()
 def rm(
-    ctx: Context,
     recursive: bool = typer.Option(False, "-r", "--recursive", help="remove directories and their contents recursively"),
     paths: list[Path] = typer.Argument(..., )
 ) -> None:
-    container: Container = get_container(ctx)
+    command: str = "rm"
+    if recursive: command += f" -r"
     for path in paths:
+        command += f" {path}"
         try:
-            container.console_service.rm(
+            console_service.rm(
                                         recursive,
                                         path
             )
         except OSError as e:
            typer.echo(e)
+    console_service._history.append_command_to_history(command)
 
 @app.command()
 def tar(
-    ctx: Context,
     folder: Path = typer.Argument(...),
     archive_name: Path = typer.Argument(...)
 ) -> None:
+    command: str = f"tar {folder} {archive_name}"
     try:
-        container: Container = get_container(ctx)
-        container.console_service.pack(folder, archive_name, ArchiveFormat.gztar)
+        console_service.pack(folder, archive_name, ArchiveFormat.gztar)
     except OSError as e:
         typer.echo(e)
+    console_service._history.append_command_to_history(command)
 
 @app.command()
 def untar(
-    ctx: Context,
     archive: Path = typer.Argument(...),
     dest: Path = typer.Argument(default=Path("."))
 ) -> None:
+    command: str = f"untar {archive} {dest}"
     try:
-        container: Container = get_container(ctx)
-        container.console_service.unpack(archive, dest, ArchiveFormat.gztar)
+        
+        console_service.unpack(archive, dest, ArchiveFormat.gztar)
     except OSError as e:
         typer.echo(e)
+    console_service._history.append_command_to_history(command)
 
 @app.command()
 def zip(
-    ctx: Context,
     folder: Path = typer.Argument(...),
     archive_name: Path = typer.Argument(...)
 ) -> None:
+    command: str = f"zip {folder} {archive_name}"
     try:
-        container: Container = get_container(ctx)
-        container.console_service.pack(folder, archive_name, ArchiveFormat.zipfile)
+        
+        console_service.pack(folder, archive_name, ArchiveFormat.zipfile)
     except OSError as e:
         typer.echo(e)
+    console_service._history.append_command_to_history(command)
 
 @app.command()
 def unzip(
-    ctx: Context,
     archive: Path = typer.Argument(...),
     dest: Path = typer.Argument(default=Path("."))
 ) -> None:
+    command: str = f"unzip {archive} {dest}"
     try:
-        container: Container = get_container(ctx)
-        container.console_service.unpack(archive, dest, ArchiveFormat.zipfile)
+        console_service.unpack(archive, dest, ArchiveFormat.zipfile)
     except OSError as e:
         typer.echo(e)
+    console_service._history.append_command_to_history(command)
 
 @app.command()
 def grep(
-    ctx: Context,
     recursive: bool = typer.Option(
         False, "-r", "--recursive", help="Recursively check child directories"
     ),
@@ -227,12 +225,26 @@ def grep(
     pattern: str = typer.Argument(...),
     files: list[Path] = typer.Argument(default=Path("."))
 ) -> None:
+    command = "grep"
+    if recursive: command += " -r"
+    if ignorecase: command += " -i"
+    command += f" {pattern}"
+    for file in files: command += f" {file}"
     try:
-        container: Container = get_container(ctx)
-        contents = container.console_service.grep(recursive, ignorecase, pattern, files)
+        contents = console_service.grep(recursive, ignorecase, pattern, files)
         sys.stdout.writelines(contents)
     except Exception as e:
         typer.echo(e)
+    console_service._history.append_command_to_history(command)
+
+@app.command()
+def history(ctx: Context):
+    try:
+        command_history: list[str] = console_service.history()
+        sys.stdout.writelines(command_history)
+    except Exception as e:
+        typer.echo(e)
+    console_service._history.append_command_to_history("history")
 
 if __name__ == "__main__":
     app()
