@@ -21,10 +21,7 @@ def register_cat(app):
         """
         Cat a file
         """
-        command: str = "cat"
-        if mode:
-            command += " -b"
-        command += f" {Path}"
+        command: str = " ".join(sys.argv[1:])
         try:
             readmode = FileReadMode.bytes if mode else FileReadMode.string
             data = console_service.cat(

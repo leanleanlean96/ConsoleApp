@@ -23,13 +23,8 @@ def register_ls(app):
         """
         List all files in a directory/directories.
         """
-        command:str = "ls"
-        if long_form:
-            command += " -l"
-        if all_files:
-            command += " -a"
+        command: str = " ".join(sys.argv[1:])
         for path in paths:
-            command += f" {path}"
             try:
                 content = console_service.ls(path,
                                                     all_files,

@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import sys
 import typer # type: ignore
 
 from src.services.init_services import init_services
@@ -19,7 +20,7 @@ def register_mv(app):
         """
         Rename SOURCE to DEST, or move SOURCE to DIRECTORY
         """
-        command = f"mv {source} {dest}"
+        command: str = " ".join(sys.argv[1:])
         try:
 
             console_service.mv(source, dest)

@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import sys
 import typer # type: ignore
 
 from src.enums.archive_format import ArchiveFormat
@@ -16,7 +17,7 @@ def register_tar(app):
         """
         Create archive .tar.gz from file
         """
-        command: str = f"tar {folder} {archive_name}"
+        command: str = " ".join(sys.argv[1:])
         try:
             console_service.pack(folder, archive_name, ArchiveFormat.gztar)
         except OSError as e:
@@ -34,9 +35,8 @@ def register_untar(app):
         """
         Unarchive .tar.gz archive
         """
-        command: str = f"untar {archive} {dest}"
+        command: str = " ".join(sys.argv[1:])
         try:
-
             console_service.unpack(archive, dest, ArchiveFormat.gztar)
         except OSError as e:
             typer.echo(e)

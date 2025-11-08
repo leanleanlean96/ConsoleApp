@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import sys
 import typer # type: ignore
 
 from src.enums.archive_format import ArchiveFormat
@@ -16,7 +17,7 @@ def register_zip(app):
         """
         Create archive .zip from file
         """
-        command: str = f"zip {folder} {archive_name}"
+        command: str = " ".join(sys.argv[1:])
         try:
             console_service.pack(folder, archive_name, ArchiveFormat.zipfile)
         except OSError as e:
@@ -34,7 +35,7 @@ def register_unzip(app):
         """
         Unarchive .zip archive
         """
-        command: str = f"unzip {archive} {dest}"
+        command: str = " ".join(sys.argv[1:])
         try:
             console_service.unpack(archive, dest, ArchiveFormat.zipfile)
         except OSError as e:
