@@ -22,7 +22,14 @@ def register_grep(app):
         """
         Search for pattern in each file
         """
-        command: str = " ".join(sys.argv[1:])
+        command = "grep"
+        if recursive:
+            command += " -r"
+        if ignorecase:
+            command += " -i"
+        command += f" {pattern}"
+        for file in files:
+            command += f" {file}"
         try:
             contents = console_service.grep(recursive, ignorecase, pattern, files)
             sys.stdout.writelines(contents)

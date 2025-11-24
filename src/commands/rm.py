@@ -1,6 +1,5 @@
 from pathlib import Path
 
-import sys
 import typer # type: ignore
 
 from src.services.init_services import init_services
@@ -16,8 +15,11 @@ def register_rm(app):
         """
         Remove the file(s)
         """
-        command: str = " ".join(sys.argv[1:])
+        command: str = "rm"
+        if recursive:
+            command += " -r"
         for path in paths:
+            command += f" {path}"
             try:
                 console_service.rm(
                                             recursive,
