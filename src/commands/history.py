@@ -12,12 +12,11 @@ def register_history(app):
         """
         Display the history list
         """
-        command: str = " ".join(sys.argv[1:])
         try:
             command_history: list[str] = console_service.history()
             sys.stdout.writelines(command_history)
         except Exception as e:
             typer.echo(e)
-        console_service._history.append_command_to_history(command)
+        console_service._history.append_command_to_history("history")
 
     return app

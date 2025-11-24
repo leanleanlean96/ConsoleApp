@@ -1,9 +1,10 @@
+from os import getcwd
 from pathlib import Path
 
 class HistoryService:
     def __init__(
         self,
-        history_file: Path = Path("src/.history")
+        history_file: Path = Path(f"{getcwd()}/src/.history")
         ):
         self.history_file = history_file
 
